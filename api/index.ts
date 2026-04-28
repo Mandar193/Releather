@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { initializeApp } from 'firebase-admin/app';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import fs from 'fs';
 
@@ -12,12 +12,16 @@ const __dirname = path.dirname(__filename);
 // Initialize Firebase Admin
 let db: any;
 try {
-  const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-  if (fs.existsSync(configPath)) {
-    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    initializeApp({
-      projectId: firebaseConfig.projectId
-    });
+  if (getApps().length === 0) {
+    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    if (fs.existsSync(configPath)) {
+      const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      initializeApp({
+        projectId: firebaseConfig.projectId
+      });
+      db = getFirestore();
+    }
+  } else {
     db = getFirestore();
   }
 } catch (e) {
@@ -196,7 +200,7 @@ app.delete('/api/items/:id', async (req, res) => {
   }
 });
 
-// Only serve static files if NOT on Vercel (e.g. local production testing)
+// Only serve static files if NOT on Vercel
 if (!process.env.VERCEL) {
   if (process.env.NODE_ENV !== 'production') {
     const { createServer } = await import('vite');
