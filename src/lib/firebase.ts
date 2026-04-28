@@ -9,17 +9,18 @@ declare global {
   }
 }
 
-const globalConfig = (globalThis as any).__FIREBASE_CONFIG__ || {};
+// @ts-ignore
+const embeddedConfig = typeof __FIREBASE_CONFIG__ !== 'undefined' ? __FIREBASE_CONFIG__ : {};
 
 const firebaseConfig = {
-  apiKey: globalConfig.apiKey || import.meta.env.VITE_FIREBASE_API_KEY || (firebaseConfigJson as any).apiKey,
-  authDomain: globalConfig.authDomain || import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || (firebaseConfigJson as any).authDomain,
-  projectId: globalConfig.projectId || import.meta.env.VITE_FIREBASE_PROJECT_ID || (firebaseConfigJson as any).projectId,
-  storageBucket: globalConfig.storageBucket || import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || (firebaseConfigJson as any).storageBucket,
-  messagingSenderId: globalConfig.messagingSenderId || import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || (firebaseConfigJson as any).messagingSenderId,
-  appId: globalConfig.appId || import.meta.env.VITE_FIREBASE_APP_ID || (firebaseConfigJson as any).appId,
-  measurementId: globalConfig.measurementId || import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || (firebaseConfigJson as any).measurementId,
-  firestoreDatabaseId: globalConfig.firestoreDatabaseId || import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || (firebaseConfigJson as any).firestoreDatabaseId
+  apiKey: embeddedConfig.apiKey || import.meta.env.VITE_FIREBASE_API_KEY || (firebaseConfigJson as any).apiKey,
+  authDomain: embeddedConfig.authDomain || import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || (firebaseConfigJson as any).authDomain,
+  projectId: embeddedConfig.projectId || import.meta.env.VITE_FIREBASE_PROJECT_ID || (firebaseConfigJson as any).projectId,
+  storageBucket: embeddedConfig.storageBucket || import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || (firebaseConfigJson as any).storageBucket,
+  messagingSenderId: embeddedConfig.messagingSenderId || import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || (firebaseConfigJson as any).messagingSenderId,
+  appId: embeddedConfig.appId || import.meta.env.VITE_FIREBASE_APP_ID || (firebaseConfigJson as any).appId,
+  measurementId: embeddedConfig.measurementId || import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || (firebaseConfigJson as any).measurementId,
+  firestoreDatabaseId: embeddedConfig.firestoreDatabaseId || import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || (firebaseConfigJson as any).firestoreDatabaseId
 };
 
 if (!firebaseConfig.apiKey) {
