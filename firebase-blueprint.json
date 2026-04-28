@@ -1,0 +1,97 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile and sustainability tracking data",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "sustainabilityScore": {
+          "type": "object",
+          "properties": {
+            "itemsResold": { "type": "integer" },
+            "itemsRecycled": { "type": "integer" },
+            "co2Saved": { "type": "number" }
+          }
+        },
+        "role": { "type": "string", "enum": ["user", "admin", "recycler"] }
+      },
+      "required": ["uid", "email", "createdAt"]
+    },
+    "Item": {
+      "title": "Leather Item",
+      "description": "A leather product listed for resale or recycling",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sellerId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "brand": { "type": "string" },
+        "images": { 
+          "type": "array", 
+          "items": { "type": "string" } 
+        },
+        "aiAnalysis": {
+          "type": "object",
+          "properties": {
+            "condition": { "type": "string", "enum": ["New", "Excellent", "Good", "Fair", "Poor"] },
+            "suggestedPrice": { "type": "number" },
+            "confidence": { "type": "number" },
+            "notes": { "type": "string" }
+          }
+        },
+        "listedPrice": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "marketplace", "sold", "recycling", "recycled"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "lifecycleHistory": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "status": { "type": "string" },
+              "timestamp": { "type": "string", "format": "date-time" },
+              "note": { "type": "string" }
+            }
+          }
+        }
+      },
+      "required": ["sellerId", "title", "status", "createdAt"]
+    },
+    "Transaction": {
+      "title": "Marketplace Transaction",
+      "description": "A purchase record for an item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "itemId": { "type": "string" },
+        "buyerId": { "type": "string" },
+        "sellerId": { "type": "string" },
+        "amount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["completed", "refunded"] }
+      },
+      "required": ["itemId", "buyerId", "sellerId", "amount", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "items/{itemId}": {
+      "schema": "Item",
+      "description": "Leather items in the marketplace or recycling loop"
+    },
+    "transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Transaction records"
+    }
+  }
+}

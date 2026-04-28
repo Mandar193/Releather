@@ -1,0 +1,100 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && 
+             request.auth.token.email.lower() == 'mandaras936@gmail.com';
+    }
+
+    match /test/connection {
+      allow read: if true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // User Profiles
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId) 
+        && incoming().uid == userId
+        && incoming().role == 'user'
+        && incoming().createdAt == request.time;
+      allow update: if isOwner(userId)
+        && incoming().uid == existing().uid
+        && incoming().role == existing().role
+        && incoming().createdAt == existing().createdAt;
+    }
+
+    // Items
+    function isValidItem(data) {
+      return data.sellerId is string && data.sellerId.size() <= 128
+        && data.title is string && data.title.size() <= 200
+        && data.status in ['pending', 'marketplace', 'sold', 'recycling', 'recycled']
+        && (data.listedPrice == null || data.listedPrice >= 0);
+    }
+
+    match /items/{itemId} {
+      allow read: if true; // Marketplace is public
+      allow create: if isSignedIn() 
+        && isValidItem(incoming())
+        && incoming().sellerId == request.auth.uid
+        && incoming().status in ['pending', 'marketplace', 'recycling']
+        && incoming().createdAt == request.time;
+      
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        // Seller actions: edit basic info or list on marketplace
+        (isOwner(existing().sellerId) && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'category', 'brand', 'images', 'listedPrice', 'status', 'updatedAt'])
+          && incoming().sellerId == existing().sellerId
+          && incoming().createdAt == existing().createdAt
+          && incoming().status in ['pending', 'marketplace']
+        )) ||
+        // Buyer action: purchasing (handled via a status update to 'sold')
+        (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+         && existing().status == 'marketplace'
+         && incoming().status == 'sold') ||
+        // Recycler action: moving to recycling
+        (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+         && existing().status == 'marketplace' // or expired
+         && incoming().status == 'recycling')
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // Transactions
+    match /transactions/{transactionId} {
+      allow read: if isSignedIn() && (isOwner(resource.data.buyerId) || isOwner(resource.data.sellerId));
+      allow create: if isSignedIn()
+        && incoming().buyerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && exists(/databases/$(database)/documents/items/$(incoming().itemId))
+        && get(/databases/$(database)/documents/items/$(incoming().itemId)).data.status == 'marketplace';
+    }
+  }
+}

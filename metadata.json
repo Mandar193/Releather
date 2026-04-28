@@ -1,0 +1,12 @@
+{
+  "name": "ReLeather",
+  "description": "A circular economy platform for leather products featuring AI valuation, a resale marketplace, and verified recycling loops to promote sustainability.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "AI Vision Analysis",
+    "Marketplace",
+    "Sustainability Tracking"
+  ]
+}
