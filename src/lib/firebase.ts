@@ -24,7 +24,11 @@ const firebaseConfig = {
 };
 
 if (!firebaseConfig.apiKey) {
-  console.error("Firebase API Key is missing. Please check your environment variables or firebase-applet-config.json.");
+  console.error("Firebase API Key is missing. Embedded config keys:", Object.keys(embeddedConfig));
+  console.error("VITE_FIREBASE_API_KEY present:", !!import.meta.env.VITE_FIREBASE_API_KEY);
+  console.error("Please check your environment variables or firebase-applet-config.json.");
+} else {
+  console.log("Firebase initialized successfully with API key.");
 }
 
 const app = initializeApp(firebaseConfig);
