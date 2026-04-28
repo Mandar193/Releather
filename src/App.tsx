@@ -12,6 +12,12 @@ import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 
 export default function App() {
   useEffect(() => {
+    // Check backend health
+    fetch('/api/health')
+      .then(r => r.json())
+      .then(d => console.log('Backend Health:', d))
+      .catch(e => console.error('Backend Unreachable:', e));
+
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
       if (user) {
         const userRef = doc(db, "users", user.uid);

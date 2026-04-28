@@ -53,6 +53,16 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 app.use(cors());
 app.use(express.json());
 
+// Health Check
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    dbInitialized: !!db,
+    env: process.env.NODE_ENV,
+    isVercel: !!process.env.VERCEL
+  });
+});
+
 // API Routes
 
 // User Profile
@@ -228,7 +238,7 @@ if (!process.env.VERCEL) {
         appType: 'spa',
       }).then((vite) => {
         app.use(vite.middlewares);
-        (app.listen as any)(PORT, '0.0.0.0', () => {
+        app.listen(PORT, '0.0.0.0', () => {
           console.log(`Server running on http://localhost:${PORT}`);
         });
       });
@@ -239,7 +249,7 @@ if (!process.env.VERCEL) {
     app.get('/api/*', (req, res) => {
       res.status(404).json({ error: 'API route not found' });
     });
-    // Fallback for SPA routing handled via vercel.json, but kept for local prod test
+    
     app.get('*', (req, res) => {
       const indexPath = path.join(distPath, 'index.html');
       if (fs.existsSync(indexPath)) {
@@ -249,7 +259,7 @@ if (!process.env.VERCEL) {
       }
     });
 
-    (app.listen as any)(PORT, '0.0.0.0', () => {
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(`Server running on http://localhost:${PORT}`);
     });
   }
