@@ -13,13 +13,32 @@ const __dirname = path.dirname(__filename);
 let db: any;
 try {
   if (getApps().length === 0) {
-    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-    if (fs.existsSync(configPath)) {
-      const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      initializeApp({
-        projectId: firebaseConfig.projectId
-      });
-      db = getFirestore();
+    const configPaths = [
+      path.join(process.cwd(), 'firebase-applet-config.json'),
+      path.join(__dirname, '..', 'firebase-applet-config.json')
+    ];
+    
+    let configFound = false;
+    for (const configPath of configPaths) {
+      if (fs.existsSync(configPath)) {
+        const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        initializeApp({
+          projectId: firebaseConfig.projectId
+        });
+        db = getFirestore();
+        configFound = true;
+        break;
+      }
+    }
+    
+    if (!configFound) {
+      console.warn('Firebase config file not found, checking environment variables...');
+      if (process.env.VITE_FIREBASE_PROJECT_ID) {
+        initializeApp({
+          projectId: process.env.VITE_FIREBASE_PROJECT_ID
+        });
+        db = getFirestore();
+      }
     }
   } else {
     db = getFirestore();
@@ -29,7 +48,7 @@ try {
 }
 
 const app = express();
-const PORT = Number(process.env.PORT || 3000);
+const PORT = parseInt(process.env.PORT || '3000', 10);
 
 app.use(cors());
 app.use(express.json());
@@ -209,7 +228,7 @@ if (!process.env.VERCEL) {
         appType: 'spa',
       }).then((vite) => {
         app.use(vite.middlewares);
-        app.listen(PORT, '0.0.0.0', () => {
+        (app.listen as any)(PORT, '0.0.0.0', () => {
           console.log(`Server running on http://localhost:${PORT}`);
         });
       });
@@ -217,19 +236,20 @@ if (!process.env.VERCEL) {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
+    app.get('/api/*', (req, res) => {
+      res.status(404).json({ error: 'API route not found' });
+    });
+    // Fallback for SPA routing handled via vercel.json, but kept for local prod test
     app.get('*', (req, res) => {
-      if (req.path.startsWith('/api')) {
-        return res.status(404).json({ error: 'API route not found' });
-      }
       const indexPath = path.join(distPath, 'index.html');
       if (fs.existsSync(indexPath)) {
         res.sendFile(indexPath);
       } else {
-        res.status(404).send('Not found');
+        res.status(404).send('Static files not found');
       }
     });
 
-    app.listen(PORT, '0.0.0.0', () => {
+    (app.listen as any)(PORT, '0.0.0.0', () => {
       console.log(`Server running on http://localhost:${PORT}`);
     });
   }
