@@ -22,24 +22,43 @@ const FALLBACK_CONFIG = {
   messagingSenderId: "591444380616"
 };
 
+// Log for debugging
+console.log('Lib Firebase: Checking for config sources...');
+
+function getConfigValue(key: string, bakedKey: string, envKey: string, jsonKey: string, fallbackKey: string) {
+  const val = bakedKey || envKey || jsonKey || fallbackKey;
+  if (!val) console.warn(`Firebase config: ${key} is missing from all sources.`);
+  return val;
+}
+
 const firebaseConfig = {
-  apiKey: embeddedConfig.apiKey || import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfigJson.apiKey || FALLBACK_CONFIG.apiKey,
-  authDomain: embeddedConfig.authDomain || import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfigJson.authDomain || FALLBACK_CONFIG.authDomain,
-  projectId: embeddedConfig.projectId || import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseConfigJson.projectId || FALLBACK_CONFIG.projectId,
-  storageBucket: embeddedConfig.storageBucket || import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfigJson.storageBucket || FALLBACK_CONFIG.storageBucket,
-  messagingSenderId: embeddedConfig.messagingSenderId || import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfigJson.messagingSenderId || FALLBACK_CONFIG.messagingSenderId,
-  appId: embeddedConfig.appId || import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfigJson.appId || FALLBACK_CONFIG.appId,
+  apiKey: getConfigValue('apiKey', embeddedConfig.apiKey, import.meta.env.VITE_FIREBASE_API_KEY, firebaseConfigJson.apiKey, FALLBACK_CONFIG.apiKey),
+  authDomain: getConfigValue('authDomain', embeddedConfig.authDomain, import.meta.env.VITE_FIREBASE_AUTH_DOMAIN, firebaseConfigJson.authDomain, FALLBACK_CONFIG.authDomain),
+  projectId: getConfigValue('projectId', embeddedConfig.projectId, import.meta.env.VITE_FIREBASE_PROJECT_ID, firebaseConfigJson.projectId, FALLBACK_CONFIG.projectId),
+  storageBucket: getConfigValue('storageBucket', embeddedConfig.storageBucket, import.meta.env.VITE_FIREBASE_STORAGE_BUCKET, firebaseConfigJson.storageBucket, FALLBACK_CONFIG.storageBucket),
+  messagingSenderId: getConfigValue('messagingSenderId', embeddedConfig.messagingSenderId, import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID, firebaseConfigJson.messagingSenderId, FALLBACK_CONFIG.messagingSenderId),
+  appId: getConfigValue('appId', embeddedConfig.appId, import.meta.env.VITE_FIREBASE_APP_ID, firebaseConfigJson.appId, FALLBACK_CONFIG.appId),
   measurementId: embeddedConfig.measurementId || import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || firebaseConfigJson.measurementId || '',
   firestoreDatabaseId: embeddedConfig.firestoreDatabaseId || import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || firebaseConfigJson.firestoreDatabaseId || FALLBACK_CONFIG.firestoreDatabaseId
 };
 
-if (!firebaseConfig.apiKey || firebaseConfig.apiKey === '') {
-  console.error("Firebase API Key is still missing after fallback check.");
-} else {
-  console.log("Firebase initialized successfully with configuration.");
+let app;
+try {
+  if (!firebaseConfig.apiKey) {
+    throw new Error('Firebase Config: apiKey is missing. Cannot initialize.');
+  }
+  app = initializeApp(firebaseConfig);
+  console.log("Firebase initialized successfully.");
+} catch (e) {
+  console.error("Firebase initialization FAILED:", e);
+  // Create a dummy app to prevent crashes on export
+  app = {
+    options: firebaseConfig,
+    name: '[DEFAULT]',
+    automaticDataCollectionEnabled: false
+  } as any;
 }
 
-const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
 export const auth = getAuth(app);
 
