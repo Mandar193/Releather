@@ -12,11 +12,32 @@ export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   
   // Load Firebase config for embedding
-  let firebaseConfig = {};
   const configPath = path.resolve(__dirname, 'firebase-applet-config.json');
+  let bakedConfig = {
+    apiKey: '',
+    authDomain: '',
+    projectId: '',
+    storageBucket: '',
+    messagingSenderId: '',
+    appId: '',
+    measurementId: '',
+    firestoreDatabaseId: ''
+  };
+
   if (fs.existsSync(configPath)) {
     try {
-      firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      bakedConfig = {
+        apiKey: env.VITE_FIREBASE_API_KEY || config.apiKey || '',
+        authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || config.authDomain || '',
+        projectId: env.VITE_FIREBASE_PROJECT_ID || config.projectId || '',
+        storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || config.storageBucket || '',
+        messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || config.messagingSenderId || '',
+        appId: env.VITE_FIREBASE_APP_ID || config.appId || '',
+        measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || config.measurementId || '',
+        firestoreDatabaseId: env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || config.firestoreDatabaseId || ''
+      };
+      console.log('Embedding Firebase config for project:', bakedConfig.projectId);
     } catch (e) {
       console.error('Failed to parse Firebase config for embedding:', e);
     }
@@ -26,16 +47,7 @@ export default defineConfig(({mode}) => {
     plugins: [react(), tailwindcss()],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      '__FIREBASE_CONFIG__': JSON.stringify({
-        apiKey: env.VITE_FIREBASE_API_KEY || (firebaseConfig as any).apiKey || '',
-        authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || (firebaseConfig as any).authDomain || '',
-        projectId: env.VITE_FIREBASE_PROJECT_ID || (firebaseConfig as any).projectId || '',
-        storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || (firebaseConfig as any).storageBucket || '',
-        messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || (firebaseConfig as any).messagingSenderId || '',
-        appId: env.VITE_FIREBASE_APP_ID || (firebaseConfig as any).appId || '',
-        measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || (firebaseConfig as any).measurementId || '',
-        firestoreDatabaseId: env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || (firebaseConfig as any).firestoreDatabaseId || ''
-      })
+      '__FIREBASE_CONFIG__': JSON.stringify(bakedConfig)
     },
     resolve: {
       alias: {

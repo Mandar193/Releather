@@ -12,23 +12,31 @@ declare global {
 // @ts-ignore
 const embeddedConfig = typeof __FIREBASE_CONFIG__ !== 'undefined' ? __FIREBASE_CONFIG__ : {};
 
-const firebaseConfig = {
-  apiKey: embeddedConfig.apiKey || import.meta.env.VITE_FIREBASE_API_KEY || (firebaseConfigJson as any).apiKey,
-  authDomain: embeddedConfig.authDomain || import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || (firebaseConfigJson as any).authDomain,
-  projectId: embeddedConfig.projectId || import.meta.env.VITE_FIREBASE_PROJECT_ID || (firebaseConfigJson as any).projectId,
-  storageBucket: embeddedConfig.storageBucket || import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || (firebaseConfigJson as any).storageBucket,
-  messagingSenderId: embeddedConfig.messagingSenderId || import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || (firebaseConfigJson as any).messagingSenderId,
-  appId: embeddedConfig.appId || import.meta.env.VITE_FIREBASE_APP_ID || (firebaseConfigJson as any).appId,
-  measurementId: embeddedConfig.measurementId || import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || (firebaseConfigJson as any).measurementId,
-  firestoreDatabaseId: embeddedConfig.firestoreDatabaseId || import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || (firebaseConfigJson as any).firestoreDatabaseId
+const FALLBACK_CONFIG = {
+  projectId: "gen-lang-client-0555845621",
+  appId: "1:591444380616:web:41aa6900026527df2b0efd",
+  apiKey: "AIzaSyBJKcerJPLHGuClCiqrqM_GsNk47O5vDyw",
+  authDomain: "gen-lang-client-0555845621.firebaseapp.com",
+  firestoreDatabaseId: "ai-studio-f25d80da-648b-43e6-8b03-1b78e0ff6887",
+  storageBucket: "gen-lang-client-0555845621.firebasestorage.app",
+  messagingSenderId: "591444380616"
 };
 
-if (!firebaseConfig.apiKey) {
-  console.error("Firebase API Key is missing. Embedded config keys:", Object.keys(embeddedConfig));
-  console.error("VITE_FIREBASE_API_KEY present:", !!import.meta.env.VITE_FIREBASE_API_KEY);
-  console.error("Please check your environment variables or firebase-applet-config.json.");
+const firebaseConfig = {
+  apiKey: embeddedConfig.apiKey || import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfigJson.apiKey || FALLBACK_CONFIG.apiKey,
+  authDomain: embeddedConfig.authDomain || import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfigJson.authDomain || FALLBACK_CONFIG.authDomain,
+  projectId: embeddedConfig.projectId || import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseConfigJson.projectId || FALLBACK_CONFIG.projectId,
+  storageBucket: embeddedConfig.storageBucket || import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfigJson.storageBucket || FALLBACK_CONFIG.storageBucket,
+  messagingSenderId: embeddedConfig.messagingSenderId || import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfigJson.messagingSenderId || FALLBACK_CONFIG.messagingSenderId,
+  appId: embeddedConfig.appId || import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfigJson.appId || FALLBACK_CONFIG.appId,
+  measurementId: embeddedConfig.measurementId || import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || firebaseConfigJson.measurementId || '',
+  firestoreDatabaseId: embeddedConfig.firestoreDatabaseId || import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || firebaseConfigJson.firestoreDatabaseId || FALLBACK_CONFIG.firestoreDatabaseId
+};
+
+if (!firebaseConfig.apiKey || firebaseConfig.apiKey === '') {
+  console.error("Firebase API Key is still missing after fallback check.");
 } else {
-  console.log("Firebase initialized successfully with API key.");
+  console.log("Firebase initialized successfully with configuration.");
 }
 
 const app = initializeApp(firebaseConfig);
