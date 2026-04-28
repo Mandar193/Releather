@@ -7,7 +7,7 @@ import Dashboard from "./pages/Dashboard";
 import Admin from "./pages/Admin";
 import Login from "./pages/Login";
 import { useEffect } from "react";
-import { auth, db } from "./lib/firebase";
+import { auth, db, app } from "./lib/firebase";
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 
 export default function App() {
@@ -20,22 +20,30 @@ export default function App() {
 
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
       if (user) {
-        const userRef = doc(db, "users", user.uid);
-        const userDoc = await getDoc(userRef);
-        if (!userDoc.exists()) {
-          await setDoc(userRef, {
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName || "Leather Lover",
-            photoURL: user.photoURL,
-            createdAt: serverTimestamp(),
-            sustainabilityScore: {
-              itemsResold: 0,
-              itemsRecycled: 0,
-              co2Saved: 0,
-            },
-            role: "user",
-          });
+        try {
+          if (app?.name === '[FAILED]') {
+            console.warn("Skipping profile sync: Firebase failed to initialize.");
+            return;
+          }
+          const userRef = doc(db, "users", user.uid);
+          const userDoc = await getDoc(userRef);
+          if (!userDoc.exists()) {
+            await setDoc(userRef, {
+              uid: user.uid,
+              email: user.email,
+              displayName: user.displayName || "Leather Lover",
+              photoURL: user.photoURL,
+              createdAt: serverTimestamp(),
+              sustainabilityScore: {
+                itemsResold: 0,
+                itemsRecycled: 0,
+                co2Saved: 0,
+              },
+              role: "user",
+            });
+          }
+        } catch (e) {
+          console.warn("Could not auto-sync profile in client:", e);
         }
       }
     });

@@ -6,7 +6,10 @@ export const api = {
   // Users
   async getUser(uid: string): Promise<UserProfile> {
     const res = await fetch(`${API_BASE}/users/${uid}`);
-    if (!res.ok) throw new Error('User not found');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'User not found');
+    }
     return res.json();
   },
 
@@ -16,14 +19,20 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(user)
     });
-    if (!res.ok) throw new Error('Failed to save user');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to save user');
+    }
   },
 
   // Items
   async getItems(sellerId?: string): Promise<LeatherItem[]> {
     const url = sellerId ? `${API_BASE}/items?sellerId=${sellerId}` : `${API_BASE}/items`;
     const res = await fetch(url);
-    if (!res.ok) throw new Error('Failed to fetch items');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to fetch items');
+    }
     return res.json();
   },
 

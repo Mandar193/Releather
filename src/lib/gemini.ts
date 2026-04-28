@@ -1,31 +1,30 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AIAnalysis } from "../types";
 
-const key = process.env.GEMINI_API_KEY;
-if (!key || key === 'MY_GEMINI_API_KEY') {
-  console.warn("Gemini API Key is not set or using placeholder. Please set GEMINI_API_KEY in the Secrets tab.");
-} else if (key === 'releather') {
-  console.info("Gemini initialized with project secret value 'releather'.");
+let ai: any = null;
+
+function getAI() {
+  if (!ai) {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key || key === 'MY_GEMINI_API_KEY' || key === '') {
+      throw new Error("Gemini API Key is not configured. Please add GEMINI_API_KEY to your environment variables or Secrets tab in the AI Studio editor.");
+    }
+    ai = new GoogleGenAI({ apiKey: key });
+  }
+  return ai;
 }
 
-const ai = new GoogleGenAI({ apiKey: key || '' });
-
 export async function analyzeLeatherProduct(imageBase64: string): Promise<AIAnalysis> {
-  const prompt = `You are a leather industry expert. Analyze this photo of a leather product.
-  Identify:
-  1. Condition: New, Excellent, Good, Fair, or Poor.
-  2. Suggested Price: A realistic resale value in USD.
-  3. Notes: A brief expert note on material quality, brand authenticity markers (if visible), and condition details.
-  
-  Be precise and objective. If multiple images are provided in the future, synthesize the data.
-  Current analysis is based on this single image.`;
-
-  const response = await ai.models.generateContent({
+  const response = await getAI().models.generateContent({ 
     model: "gemini-3-flash-preview",
     contents: {
       parts: [
         { inlineData: { mimeType: "image/jpeg", data: imageBase64 } },
-        { text: prompt }
+        { text: `You are a leather industry expert. Analyze this photo of a leather product.
+          Identify:
+          1. Condition: New, Excellent, Good, Fair, or Poor.
+          2. Suggested Price: A realistic resale value in USD.
+          3. Notes: A brief expert note on material quality, brand authenticity markers (if visible), and condition details.` }
       ]
     },
     config: {
@@ -33,9 +32,9 @@ export async function analyzeLeatherProduct(imageBase64: string): Promise<AIAnal
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          condition: { type: Type.STRING, enum: ["New", "Excellent", "Good", "Fair", "Poor"] },
+          condition: { type: Type.STRING }, // Enum validation handled by prompt better in some versions
           suggestedPrice: { type: Type.NUMBER },
-          confidence: { type: Type.NUMBER, description: "Score from 0 to 1" },
+          confidence: { type: Type.NUMBER },
           notes: { type: Type.STRING }
         },
         required: ["condition", "suggestedPrice", "confidence", "notes"]
@@ -43,21 +42,17 @@ export async function analyzeLeatherProduct(imageBase64: string): Promise<AIAnal
     }
   });
 
-  if (!response.text) {
-    throw new Error("Failed to get response from Gemini");
-  }
-
-  return JSON.parse(response.text) as AIAnalysis;
+  const text = response.text;
+  if (!text) throw new Error("Failed to get response from Gemini");
+  return JSON.parse(text) as AIAnalysis;
 }
 
 export async function suggestSustainabilityImpact(itemTitle: string): Promise<string> {
-  const prompt = `Calculate and explain the environmental impact of reselling/recycling a ${itemTitle} instead of it going to a landfill.
-  Mention approximate liters of water saved and CO2 emissions avoided. Keep it under 2 sentences.`;
-  
-  const response = await ai.models.generateContent({
+  const response = await getAI().models.generateContent({
     model: "gemini-3-flash-preview",
-    contents: prompt
+    contents: `Calculate and explain the environmental impact of reselling/recycling a ${itemTitle} instead of it going to a landfill.
+      Mention approximate liters of water saved and CO2 emissions avoided. Keep it under 2 sentences.`
   });
-
-  return response.text.trim();
+  
+  return (response.text || "").trim();
 }

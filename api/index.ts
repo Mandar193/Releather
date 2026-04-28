@@ -22,10 +22,11 @@ try {
     for (const configPath of configPaths) {
       if (fs.existsSync(configPath)) {
         const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        initializeApp({
+        const app = initializeApp({
           projectId: firebaseConfig.projectId
         });
-        db = getFirestore();
+        db = getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
+        console.log(`Firebase Admin initialized with project ${firebaseConfig.projectId} and database ${firebaseConfig.firestoreDatabaseId || '(default)'}`);
         configFound = true;
         break;
       }
@@ -34,10 +35,11 @@ try {
     if (!configFound) {
       console.warn('Firebase config file not found, checking environment variables...');
       if (process.env.VITE_FIREBASE_PROJECT_ID) {
-        initializeApp({
+        const app = initializeApp({
           projectId: process.env.VITE_FIREBASE_PROJECT_ID
         });
-        db = getFirestore();
+        db = getFirestore(app, process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || '(default)');
+        console.log('Firebase Admin initialized from environment variables.');
       }
     }
   } else {

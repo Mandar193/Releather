@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
@@ -60,42 +61,63 @@ try {
   app = { name: '[FAILED]' } as any;
   db = new Proxy({}, { 
     get: (_, prop) => { 
-      console.warn(`Firestore accessed but not initialized. Property: ${String(prop)}`);
-      return () => Promise.reject(new Error("Firebase not initialized")); 
+      if (prop === 'type') return 'firestore';
+      if (typeof prop === 'symbol') return undefined;
+      return async (...args: any[]) => {
+        console.warn(`Firestore accessed but not initialized. Method: ${String(prop)}`, args);
+        throw new Error("Firebase Firestore not initialized"); 
+      };
     } 
   });
   auth = new Proxy({}, { 
     get: (_, prop) => { 
-      console.warn(`Firebase Auth accessed but not initialized. Property: ${String(prop)}`);
-      return null; 
+      if (prop === 'currentUser') return null;
+      if (prop === 'onAuthStateChanged' || prop === 'onIdTokenChanged') {
+        return (cb: any) => {
+          console.warn(`Auth listener '${String(prop)}' called but not initialized.`);
+          return () => {}; // Unsubscribe no-op
+        };
+      }
+      if (typeof prop === 'symbol') return undefined;
+      return async (...args: any[]) => {
+        console.warn(`Firebase Auth accessed but not initialized. Method: ${String(prop)}`, args);
+        throw new Error("Firebase Auth not initialized"); 
+      };
     } 
   });
 }
 
-export { db, auth };
+export { db, auth, app };
 
 // Validate Connection
 async function testConnection() {
+  if (!app || app?.name === '[FAILED]' || !db) return;
   try {
+    // Check if db is a proxy or real
+    if (typeof db.collection === 'function') {
+       // This is admin SDK or a proxy that implemented collection
+    }
+    
     // Try to get a document with a timeout
-    const connectionPromise = getDocFromServer(doc(db, 'test', 'connection'));
+    const testDocRef = doc(db, 'test', 'connection');
+    const connectionPromise = getDocFromServer(testDocRef);
     const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Connection timeout')), 15000)
+      setTimeout(() => reject(new Error('Connection timeout')), 10000)
     );
     
     await Promise.race([connectionPromise, timeoutPromise]);
     console.log("Firebase connection successful.");
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message.includes('the client is offline') || error.message.includes('Connection timeout')) {
-        console.warn("Firestore is currently unreachable. The app will work in offline mode and sync when possible.");
+      if (error.message.includes('the client is offline') || error.message.includes('Connection timeout') || error.message.includes('Firebase not initialized')) {
+        console.warn("Firestore is currently unreachable or not initialized. The app will work in offline mode and sync when possible.");
       } else {
         console.error("Firestore connectivity issue:", error.message);
       }
     }
   }
 }
-testConnection();
+testConnection().catch(err => console.debug("Initial connection check failed (expected in some environments):", err));
 
 export enum OperationType {
   CREATE = 'create',
