@@ -29,7 +29,7 @@ try {
 }
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT || 3000);
 
 app.use(cors());
 app.use(express.json());
@@ -200,15 +200,20 @@ app.delete('/api/items/:id', async (req, res) => {
   }
 });
 
-// Only serve static files if NOT on Vercel
+// Only listen if not on Vercel
 if (!process.env.VERCEL) {
   if (process.env.NODE_ENV !== 'production') {
-    const { createServer } = await import('vite');
-    const vite = await createServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
+    import('vite').then(({ createServer }) => {
+      createServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      }).then((vite) => {
+        app.use(vite.middlewares);
+        app.listen(PORT, '0.0.0.0', () => {
+          console.log(`Server running on http://localhost:${PORT}`);
+        });
+      });
     });
-    app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
@@ -223,11 +228,11 @@ if (!process.env.VERCEL) {
         res.status(404).send('Not found');
       }
     });
-  }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }
 }
 
 export default app;
