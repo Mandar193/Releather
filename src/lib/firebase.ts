@@ -1,11 +1,34 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
+import firebaseConfigJson from '../../firebase-applet-config.json';
+
+declare global {
+  interface Window {
+    __FIREBASE_CONFIG__?: any;
+  }
+}
+
+const globalConfig = (globalThis as any).__FIREBASE_CONFIG__ || {};
+
+const firebaseConfig = {
+  apiKey: globalConfig.apiKey || import.meta.env.VITE_FIREBASE_API_KEY || (firebaseConfigJson as any).apiKey,
+  authDomain: globalConfig.authDomain || import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || (firebaseConfigJson as any).authDomain,
+  projectId: globalConfig.projectId || import.meta.env.VITE_FIREBASE_PROJECT_ID || (firebaseConfigJson as any).projectId,
+  storageBucket: globalConfig.storageBucket || import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || (firebaseConfigJson as any).storageBucket,
+  messagingSenderId: globalConfig.messagingSenderId || import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || (firebaseConfigJson as any).messagingSenderId,
+  appId: globalConfig.appId || import.meta.env.VITE_FIREBASE_APP_ID || (firebaseConfigJson as any).appId,
+  measurementId: globalConfig.measurementId || import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || (firebaseConfigJson as any).measurementId,
+  firestoreDatabaseId: globalConfig.firestoreDatabaseId || import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || (firebaseConfigJson as any).firestoreDatabaseId
+};
+
+if (!firebaseConfig.apiKey) {
+  console.error("Firebase API Key is missing. Please check your environment variables or firebase-applet-config.json.");
+}
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-export const auth = getAuth();
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
+export const auth = getAuth(app);
 
 // Validate Connection
 async function testConnection() {
