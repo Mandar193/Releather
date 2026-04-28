@@ -3,56 +3,27 @@ import { createServer as createViteServer } from 'vite';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import Database from 'better-sqlite3';
+import { initializeApp } from 'firebase-admin/app';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Initialize Database
-const db = new Database('data.db');
-
-// Create tables
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    uid TEXT PRIMARY KEY,
-    email TEXT,
-    display_name TEXT,
-    photo_url TEXT,
-    role TEXT DEFAULT 'user',
-    items_resold INTEGER DEFAULT 0,
-    items_recycled INTEGER DEFAULT 0,
-    co2_saved REAL DEFAULT 0.0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS items (
-    id TEXT PRIMARY KEY,
-    seller_id TEXT,
-    title TEXT,
-    description TEXT,
-    category TEXT,
-    brand TEXT,
-    images TEXT, -- JSON string
-    condition TEXT,
-    suggested_price REAL,
-    confidence REAL,
-    analysis_notes TEXT,
-    listed_price REAL,
-    status TEXT DEFAULT 'pending',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(seller_id) REFERENCES users(uid)
-  );
-
-  CREATE TABLE IF NOT EXISTS lifecycle_events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    item_id TEXT,
-    status TEXT,
-    note TEXT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(item_id) REFERENCES items(id)
-  );
-`);
+// Initialize Firebase Admin
+let db: any;
+try {
+  const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+  if (fs.existsSync(configPath)) {
+    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    initializeApp({
+      projectId: firebaseConfig.projectId
+    });
+    db = getFirestore();
+  }
+} catch (e) {
+  console.error('Firebase admin initialization failed:', e);
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -62,144 +33,169 @@ app.use(express.json());
 
 // API Routes
 
-  // User Profile
-  app.get('/api/users/:uid', (req, res) => {
-    try {
-      const user = db.prepare('SELECT * FROM users WHERE uid = ?').get(req.params.uid);
-      if (!user) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-      // Map database row to UserProfile interface
-      res.json({
-        uid: user.uid,
-        email: user.email,
-        displayName: user.display_name,
-        photoURL: user.photo_url,
-        role: user.role,
-        sustainabilityScore: {
-          itemsResold: user.items_resold,
-          itemsRecycled: user.items_recycled,
-          co2Saved: user.co2_saved
-        },
-        createdAt: user.created_at
+// User Profile
+app.get('/api/users/:uid', async (req, res) => {
+  try {
+    if (!db) throw new Error('Database not initialized');
+    const userDoc = await db.collection('users').doc(req.params.uid).get();
+    
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json(userDoc.data());
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/users', async (req, res) => {
+  const { uid, email, displayName, photoURL } = req.body;
+  try {
+    if (!db) throw new Error('Database not initialized');
+    await db.collection('users').doc(uid).set({
+      uid,
+      email,
+      displayName,
+      photoURL,
+      role: 'user',
+      sustainabilityScore: {
+        itemsResold: 0,
+        itemsRecycled: 0,
+        co2Saved: 0.0
+      },
+      createdAt: new Date().toISOString()
+    }, { merge: true });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// Items
+app.get('/api/items', async (req, res) => {
+  try {
+    if (!db) throw new Error('Database not initialized');
+    const { sellerId, status } = req.query;
+    let query: any = db.collection('items');
+
+    if (sellerId) {
+      query = query.where('sellerId', '==', sellerId);
+    }
+    if (status) {
+      query = query.where('status', '==', status);
+    }
+    
+    const snapshot = await query.get();
+    const items = snapshot.docs.map((doc: any) => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    res.json(items);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.patch('/api/items/:id', async (req, res) => {
+  const { status, note } = req.body;
+  try {
+    if (!db) throw new Error('Database not initialized');
+    const itemRef = db.collection('items').doc(req.params.id);
+    
+    const updateData: any = {
+      status,
+      updatedAt: new Date().toISOString()
+    };
+
+    if (note) {
+      updateData.lifecycleHistory = FieldValue.arrayUnion({
+        status,
+        note,
+        timestamp: new Date().toISOString()
       });
-    } catch (err) {
-      res.status(500).json({ error: (err as Error).message });
     }
-  });
 
-  app.post('/api/users', (req, res) => {
-    const { uid, email, displayName, photoURL } = req.body;
-    try {
-      db.prepare(`
-        INSERT INTO users (uid, email, display_name, photo_url)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(uid) DO UPDATE SET
-          display_name = excluded.display_name,
-          photo_url = excluded.photo_url
-      `).run(uid, email, displayName, photoURL);
-      res.json({ success: true });
-    } catch (err) {
-      res.status(500).json({ error: (err as Error).message });
-    }
-  });
+    await itemRef.update(updateData);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
 
-  // Items
-  app.get('/api/items', (req, res) => {
-    try {
-      const { sellerId, status } = req.query;
-      let query = 'SELECT * FROM items WHERE 1=1';
-      const params = [];
+app.post('/api/transactions', async (req, res) => {
+  const { itemId, buyerId, sellerId, amount } = req.body;
+  try {
+    if (!db) throw new Error('Database not initialized');
+    const batch = db.batch();
+    
+    const transRef = db.collection('transactions').doc();
+    batch.set(transRef, {
+      itemId,
+      buyerId,
+      sellerId,
+      amount,
+      status: 'completed',
+      createdAt: new Date().toISOString()
+    });
 
-      if (sellerId) {
-        query += ' AND seller_id = ?';
-        params.push(sellerId);
-      }
-      if (status) {
-        query += ' AND status = ?';
-        params.push(status);
-      }
-      
-      const items = db.prepare(query).all(...params);
-      
-      const formattedItems = items.map((item: any) => ({
-        ...item,
-        sellerId: item.seller_id,
-        listedPrice: item.listed_price,
-        createdAt: item.created_at,
-        updatedAt: item.updated_at,
-        images: JSON.parse(item.images || '[]'),
-        aiAnalysis: {
-          condition: item.condition,
-          suggestedPrice: item.suggested_price,
-          confidence: item.confidence,
-          notes: item.analysis_notes
-        },
-        lifecycleHistory: [] // To be populated if needed
-      }));
-      res.json(formattedItems);
-    } catch (err) {
-      res.status(500).json({ error: (err as Error).message });
-    }
-  });
+    const itemRef = db.collection('items').doc(itemId);
+    batch.update(itemRef, {
+      status: 'sold',
+      updatedAt: new Date().toISOString(),
+      lifecycleHistory: FieldValue.arrayUnion({
+        status: 'sold',
+        note: 'Purchased via Marketplace',
+        timestamp: new Date().toISOString()
+      })
+    });
 
-  app.patch('/api/items/:id', (req, res) => {
-    const { status, note } = req.body;
-    try {
-      db.prepare('UPDATE items SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, req.params.id);
-      if (note) {
-        db.prepare('INSERT INTO lifecycle_events (item_id, status, note) VALUES (?, ?, ?)').run(req.params.id, status, note);
-      }
-      res.json({ success: true });
-    } catch (err) {
-      res.status(500).json({ error: (err as Error).message });
-    }
-  });
+    // Update seller stats
+    const sellerRef = db.collection('users').doc(sellerId);
+    batch.update(sellerRef, {
+      'sustainabilityScore.itemsResold': FieldValue.increment(1),
+      'sustainabilityScore.co2Saved': FieldValue.increment(15.5) // Example value
+    });
 
-  app.post('/api/transactions', (req, res) => {
-    const { itemId, buyerId, sellerId, amount } = req.body;
-    try {
-      // In a real app we'd have a transactions table, for now we just log it and update the item
-      db.prepare('UPDATE items SET status = "sold", updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(itemId);
-      db.prepare('INSERT INTO lifecycle_events (item_id, status, note) VALUES (?, "sold", "Purchased via API")').run(itemId);
-      res.json({ success: true });
-    } catch (err) {
-      res.status(500).json({ error: (err as Error).message });
-    }
-  });
+    await batch.commit();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
 
-  app.post('/api/items', (req, res) => {
-    const item = req.body;
-    try {
-      db.prepare(`
-        INSERT INTO items (
-          id, seller_id, title, description, category, brand, images,
-          condition, suggested_price, confidence, analysis_notes,
-          listed_price, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        item.id, item.sellerId, item.title, item.description, item.category, item.brand,
-        JSON.stringify(item.images), item.aiAnalysis?.condition, 
-        item.aiAnalysis?.suggestedPrice, item.aiAnalysis?.confidence,
-        item.aiAnalysis?.notes, item.listedPrice, item.status
-      );
-      res.json({ success: true });
-    } catch (err) {
-      res.status(500).json({ error: (err as Error).message });
-    }
-  });
+app.post('/api/items', async (req, res) => {
+  const item = req.body;
+  try {
+    if (!db) throw new Error('Database not initialized');
+    const itemData = {
+      ...item,
+      createdAt: item.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      lifecycleHistory: item.lifecycleHistory || [{
+        status: item.status || 'pending',
+        note: 'Item created',
+        timestamp: new Date().toISOString()
+      }]
+    };
+    
+    await db.collection('items').doc(item.id).set(itemData);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
 
-  app.delete('/api/items/:id', (req, res) => {
-    try {
-      const result = db.prepare('DELETE FROM items WHERE id = ?').run(req.params.id);
-      if (result.changes === 0) {
-        return res.status(404).json({ error: 'Item not found' });
-      }
-      res.json({ success: true });
-    } catch (err) {
-      res.status(500).json({ error: (err as Error).message });
-    }
-  });
+app.delete('/api/items/:id', async (req, res) => {
+  try {
+    if (!db) throw new Error('Database not initialized');
+    await db.collection('items').doc(req.params.id).delete();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
 
 // Vite middleware or production serving
 if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
@@ -216,7 +212,12 @@ if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
     if (req.path.startsWith('/api')) {
       return res.status(404).json({ error: 'API route not found' });
     }
-    res.sendFile(path.join(distPath, 'index.html'));
+    const indexPath = path.join(distPath, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(404).send('Not found');
+    }
   });
 }
 
