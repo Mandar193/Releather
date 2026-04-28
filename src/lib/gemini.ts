@@ -1,7 +1,14 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AIAnalysis } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const key = process.env.GEMINI_API_KEY;
+if (!key || key === 'MY_GEMINI_API_KEY') {
+  console.warn("Gemini API Key is not set or using placeholder. Please set GEMINI_API_KEY in the Secrets tab.");
+} else if (key === 'releather') {
+  console.info("Gemini initialized with project secret value 'releather'.");
+}
+
+const ai = new GoogleGenAI({ apiKey: key || '' });
 
 export async function analyzeLeatherProduct(imageBase64: string): Promise<AIAnalysis> {
   const prompt = `You are a leather industry expert. Analyze this photo of a leather product.
