@@ -42,25 +42,37 @@ const firebaseConfig = {
   firestoreDatabaseId: embeddedConfig.firestoreDatabaseId || import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || firebaseConfigJson.firestoreDatabaseId || FALLBACK_CONFIG.firestoreDatabaseId
 };
 
-let app;
+let app: any;
+let db: any;
+let auth: any;
+
 try {
   if (!firebaseConfig.apiKey) {
     throw new Error('Firebase Config: apiKey is missing. Cannot initialize.');
   }
   app = initializeApp(firebaseConfig);
+  db = getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
+  auth = getAuth(app);
   console.log("Firebase initialized successfully.");
 } catch (e) {
   console.error("Firebase initialization FAILED:", e);
-  // Create a dummy app to prevent crashes on export
-  app = {
-    options: firebaseConfig,
-    name: '[DEFAULT]',
-    automaticDataCollectionEnabled: false
-  } as any;
+  // Create dummy objects to prevent module-level crashes, but log warnings on use
+  app = { name: '[FAILED]' } as any;
+  db = new Proxy({}, { 
+    get: (_, prop) => { 
+      console.warn(`Firestore accessed but not initialized. Property: ${String(prop)}`);
+      return () => Promise.reject(new Error("Firebase not initialized")); 
+    } 
+  });
+  auth = new Proxy({}, { 
+    get: (_, prop) => { 
+      console.warn(`Firebase Auth accessed but not initialized. Property: ${String(prop)}`);
+      return null; 
+    } 
+  });
 }
 
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
-export const auth = getAuth(app);
+export { db, auth };
 
 // Validate Connection
 async function testConnection() {
