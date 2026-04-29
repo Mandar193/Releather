@@ -37,14 +37,13 @@ export default function Sell() {
     if (!image) return;
     setIsAnalyzing(true);
     try {
-      const base64 = image.split(",")[1];
-      const result = await analyzeLeatherProduct(base64);
+      const result = await analyzeLeatherProduct(image);
       setAnalysis(result);
       const impactText = await suggestSustainabilityImpact(title || "leather product");
       setImpact(impactText);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Analysis failed. Please try again.");
+      alert(`Analysis failed: ${err.message || "Please try again."}`);
     } finally {
       setIsAnalyzing(false);
     }

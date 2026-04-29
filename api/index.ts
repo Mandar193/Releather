@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import fs from 'fs';
+import { spawn } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -53,7 +54,8 @@ const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Health Check
 app.get('/api/health', (req, res) => {
@@ -66,6 +68,74 @@ app.get('/api/health', (req, res) => {
 });
 
 // API Routes
+
+// Helper to run python scripts
+async function runPythonScript(scriptPath: string, inputData: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const py = spawn('python3', [scriptPath]);
+    let output = '';
+    let error = '';
+
+    py.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+
+    py.stderr.on('data', (data) => {
+      error += data.toString();
+    });
+
+    py.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(error || `Python script exited with code ${code}`));
+      } else {
+        resolve(output.trim());
+      }
+    });
+
+    py.stdin.write(inputData);
+    py.stdin.end();
+  });
+}
+
+// AI Analysis Routes
+app.post('/api/analyze', async (req, res) => {
+  const { imageBase64 } = req.body;
+  
+  if (!imageBase64) {
+    return res.status(400).json({ error: 'No image data provided' });
+  }
+
+  console.log(`Received analysis request. Passing to Python. Size: ${imageBase64.length} bytes`);
+  
+  try {
+    const result = await runPythonScript(path.join(process.cwd(), 'analyze.py'), imageBase64);
+    console.log('Python Analysis Response:', result);
+    
+    // Attempt to extract JSON if it's wrapped
+    const jsonMatch = result.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('AI did not return a valid JSON format');
+    }
+    
+    const parsedData = JSON.parse(jsonMatch[0]);
+    res.json(parsedData);
+  } catch (err: any) {
+    console.error('Python Analysis Error:', err);
+    res.status(500).json({ error: err.message || 'AI Analysis failed' });
+  }
+});
+
+app.post('/api/impact', async (req, res) => {
+  const { title } = req.body;
+  try {
+    const result = await runPythonScript(path.join(process.cwd(), 'impact.py'), title || "leather item");
+    res.json({ impact: result || "Positive environmental impact through circularity." });
+  } catch (err: any) {
+    console.error('Python Impact Error:', err);
+    res.status(500).json({ error: err.message || 'Impact tracking failed' });
+  }
+});
+
 
 // User Profile
 app.get('/api/users/:uid', async (req, res) => {
