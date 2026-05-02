@@ -31,8 +31,16 @@ export default function Marketplace() {
   const fetchItems = async () => {
     setLoading(true);
     try {
-      // Filter for marketplace only on server side
-      const marketItems = await api.getItems(undefined, 'marketplace');
+      // DEBUG: Fetch all to see what's happening
+      console.log("Fetching marketplace items...");
+      const allItems = await api.getItems();
+      console.log(`Debug: API returned ${allItems.length} total items`);
+      console.log("Status distribution:", allItems.reduce((acc: any, item) => {
+        acc[item.status] = (acc[item.status] || 0) + 1;
+        return acc;
+      }, {}));
+
+      const marketItems = allItems.filter(i => i.status === 'marketplace');
       console.log(`Marketplace fetched ${marketItems.length} items:`, marketItems.map(i => ({ id: i.id, status: i.status, title: i.title })));
       
       // Sorting
@@ -58,11 +66,13 @@ export default function Marketplace() {
       setItems(marketItems);
     } catch (err: any) {
       console.error(err);
-      alert("Failed to load marketplace items. " + err.message);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
+
+  const [error, setError] = useState<string | null>(null);
 
   const handleBuy = async () => {
     if (!selectedItem || !user) return;
@@ -190,6 +200,17 @@ export default function Marketplace() {
           <Loader2 className="w-12 h-12 text-[#5A5A40] animate-spin" />
           <p className="text-gray-400 font-serif italic">Loading masterpieces...</p>
         </div>
+      ) : error ? (
+        <div className="text-center py-20 bg-red-50 text-red-600 rounded-[2.5rem] border border-red-100 flex flex-col items-center">
+          <p className="font-bold text-xl mb-2 italic font-serif">Registry Sync Error</p>
+          <p className="opacity-70 mb-6">{error}</p>
+          <button 
+            onClick={fetchItems}
+            className="bg-red-600 text-white px-8 py-3 rounded-full font-bold hover:bg-red-700 transition-all"
+          >
+            Reconnect to Circular Registry
+          </button>
+        </div>
       ) : filteredItems.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
           <AnimatePresence>
@@ -199,10 +220,26 @@ export default function Marketplace() {
           </AnimatePresence>
         </div>
       ) : (
-        <div className="text-center py-32 bg-white rounded-3xl border-2 border-dashed border-gray-100">
-          <PackageX className="w-16 h-16 text-gray-100 mx-auto mb-6" />
-          <h3 className="text-2xl font-serif font-bold italic text-gray-300">No items found</h3>
-          <p className="text-gray-400">Try adjusting your search or filters.</p>
+        <div className="text-center py-32 bg-white rounded-[3rem] border-2 border-dashed border-gray-100 flex flex-col items-center">
+          <div className="w-24 h-24 bg-[#f5f5f0] rounded-full flex items-center justify-center mb-8">
+            <PackageX className="w-10 h-10 text-gray-200" />
+          </div>
+          <h3 className="text-3xl font-serif font-bold italic text-gray-900 mb-2">The marketplace is quiet...</h3>
+          <p className="text-gray-400 max-w-sm mx-auto mb-8 font-medium">
+            No items are currently listed for resale. Be the first to breathe new life into a masterpiece!
+          </p>
+          
+          <div className="flex flex-col items-center gap-4">
+            <a href="/sell" className="bg-[#5A5A40] text-white px-8 py-3 rounded-full font-bold hover:bg-[#4a4a35] transition-all">
+              List an Item
+            </a>
+            
+            {loading ? null : (
+              <p className="text-xs text-gray-300 font-mono">
+                System Registry Debug: {items.length} items on marketplace / {items.length} items total in record
+              </p>
+            )}
+          </div>
         </div>
       )}
 

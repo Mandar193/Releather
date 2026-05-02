@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import fs from 'fs';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI, Type } from '@google/genai';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -64,12 +64,12 @@ app.get('/api/health', (req, res) => {
     dbInitialized: !!db,
     env: process.env.NODE_ENV,
     isVercel: !!process.env.VERCEL,
-    hasGeminiKey: !!(process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYA)
+    hasGeminiKey: !!process.env.GEMINI_API_KEY
   });
 });
 
 // AI Initialization
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYA || '');
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYA || '' });
 
 // AI Routes
 app.post('/api/analyze', async (req, res) => {
@@ -82,30 +82,38 @@ app.post('/api/analyze', async (req, res) => {
     
     if (imageBase64.includes(',')) {
       const headerIndex = imageBase64.indexOf(',');
-      const header = imageBase64.substring(0, headerIndex);
       data = imageBase64.substring(headerIndex + 1);
+      const header = imageBase64.substring(0, headerIndex);
       if (header.includes('png')) mimeType = "image/png";
       else if (header.includes('webp')) mimeType = "image/webp";
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const result = await model.generateContent([
-      {
-        text: "You are a leather industry expert. Analyze this photo. Return a JSON object with fields: condition (New, Excellent, Good, Fair, or Poor), suggestedPrice (number in USD), confidence (0-1), and notes (string assessment)."
-      },
-      {
-        inlineData: {
-          mimeType,
-          data: data.trim()
+    const result = await ai.models.generateContent({
+      model: "gemini-1.5-flash",
+      contents: [
+        { text: "You are a leather industry expert specializing in authentication and valuation. Analyze this photo of a leather product. Return a structured assessment of its condition, suggested resale price in USD, and professional notes on material and quality." },
+        { inlineData: { mimeType, data: data.trim() } }
+      ],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            condition: { 
+              type: Type.STRING, 
+              enum: ["New", "Excellent", "Good", "Fair", "Poor"]
+            },
+            suggestedPrice: { type: Type.NUMBER },
+            confidence: { type: Type.NUMBER },
+            notes: { type: Type.STRING }
+          },
+          required: ["condition", "suggestedPrice", "confidence", "notes"]
         }
       }
-    ]);
+    });
 
-    const response = await result.response;
-    const text = response.text();
-    // Clean markdown if present
-    const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    res.json(JSON.parse(cleanJson));
+    if (!result.text) throw new Error("No response from AI");
+    res.json(JSON.parse(result.text));
   } catch (err: any) {
     console.error('AI Analysis Error:', err);
     res.status(500).json({ error: err.message || 'AI Analysis failed' });
@@ -115,17 +123,16 @@ app.post('/api/analyze', async (req, res) => {
 app.post('/api/impact', async (req, res) => {
   const { title } = req.body;
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const result = await model.generateContent(`Sustainability expert: Explain environmental impact of reselling/recycling "${title || 'leather item'}". Metrics: water saved (L) and CO2 avoided (kg). 2 sentences max.`);
-    const response = await result.response;
-    res.json({ impact: response.text() });
+    const result = await ai.models.generateContent({
+      model: "gemini-1.5-flash",
+      contents: `Sustainability expert: Explain environmental impact of reselling/recycling "${title || 'leather item'}". Metrics: water saved (L) and CO2 avoided (kg). 2 sentences max.`
+    });
+    res.json({ impact: result.text || "Positive environmental impact through circularity." });
   } catch (err: any) {
     console.error('AI Impact Error:', err);
     res.json({ impact: "Positive environmental impact through circularity." });
   }
 });
-
-// API Routes
 
 // User Profile
 app.get('/api/users/:uid', async (req, res) => {
