@@ -43,8 +43,9 @@ export default function Dashboard() {
       // Sort by date (SQLite returns ISO strings usually, but our interface expects something compatible)
       data.sort((a, b) => new Date(b.createdAt as any).getTime() - new Date(a.createdAt as any).getTime());
       setItems(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Fetch error:", err);
+      alert("Failed to load your dashboard data. " + err.message);
     } finally {
       setLoading(false);
     }

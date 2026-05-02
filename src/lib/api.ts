@@ -26,8 +26,12 @@ export const api = {
   },
 
   // Items
-  async getItems(sellerId?: string): Promise<LeatherItem[]> {
-    const url = sellerId ? `${API_BASE}/items?sellerId=${sellerId}` : `${API_BASE}/items`;
+  async getItems(sellerId?: string, status?: string): Promise<LeatherItem[]> {
+    const params = new URLSearchParams();
+    if (sellerId) params.append('sellerId', sellerId);
+    if (status) params.append('status', status);
+    
+    const url = `${API_BASE}/items${params.toString() ? '?' + params.toString() : ''}`;
     const res = await fetch(url);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));

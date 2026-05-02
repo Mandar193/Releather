@@ -26,8 +26,37 @@ export default function Sell() {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setImage(reader.result as string);
-        setAnalysis(null);
+        const img = new Image();
+        img.onload = () => {
+          // Resize/compress to max 1024px while maintaining aspect ratio
+          const canvas = document.createElement('canvas');
+          const MAX_DIM = 1024;
+          let width = img.width;
+          let height = img.height;
+          
+          if (width > height) {
+            if (width > MAX_DIM) {
+              height *= MAX_DIM / width;
+              width = MAX_DIM;
+            }
+          } else {
+            if (height > MAX_DIM) {
+              width *= MAX_DIM / height;
+              height = MAX_DIM;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          
+          // Use high quality jpeg compression
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+          setImage(compressedBase64);
+          setAnalysis(null);
+        };
+        img.src = reader.result as string;
       };
       reader.readAsDataURL(file);
     }
@@ -66,8 +95,17 @@ export default function Sell() {
       const currentTitle = title;
       const currentCategory = category;
 
+      // Reliable ID generation fallback
+      const generateId = () => {
+        try {
+          return crypto.randomUUID();
+        } catch (e) {
+          return Math.random().toString(36).substring(2) + Date.now().toString(36);
+        }
+      };
+
       const itemData = {
-        id: crypto.randomUUID(),
+        id: generateId(),
         sellerId: auth.currentUser.uid,
         title: currentTitle || "Classic Leather Item",
         description: currentAnalysis.notes,
@@ -77,12 +115,20 @@ export default function Sell() {
         listedPrice: mode === 'marketplace' ? currentAnalysis.suggestedPrice : 0,
         status: mode === 'marketplace' ? ('marketplace' as any) : ('recycling' as any),
         createdAt: new Date().toISOString() as any,
-        updatedAt: new Date().toISOString() as any
+        updatedAt: new Date().toISOString() as any,
+        lifecycleHistory: [{
+          status: (mode === 'marketplace' ? 'marketplace' : 'recycling') as any,
+          timestamp: new Date().toISOString(),
+          note: `Item listed for ${mode}`
+        }]
       };
+
+      console.log('Attempting to create item with data:', { ...itemData, images: ['[BASE64_DATA]'] });
 
       // Add via API
       await api.createItem(itemData);
       
+      console.log('Item created successfully');
       // Success: Clear all analysis states to prevent extra clicks
       setAnalysis(null);
       setImage(null);

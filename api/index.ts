@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import fs from 'fs';
-import { spawn } from 'child_process';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -63,64 +63,51 @@ app.get('/api/health', (req, res) => {
     status: 'ok', 
     dbInitialized: !!db,
     env: process.env.NODE_ENV,
-    isVercel: !!process.env.VERCEL
+    isVercel: !!process.env.VERCEL,
+    hasGeminiKey: !!(process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYA)
   });
 });
 
-// API Routes
+// AI Initialization
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYA || '');
 
-// Helper to run python scripts
-async function runPythonScript(scriptPath: string, inputData: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const py = spawn('python3', [scriptPath]);
-    let output = '';
-    let error = '';
-
-    py.stdout.on('data', (data) => {
-      output += data.toString();
-    });
-
-    py.stderr.on('data', (data) => {
-      error += data.toString();
-    });
-
-    py.on('close', (code) => {
-      if (code !== 0) {
-        reject(new Error(error || `Python script exited with code ${code}`));
-      } else {
-        resolve(output.trim());
-      }
-    });
-
-    py.stdin.write(inputData);
-    py.stdin.end();
-  });
-}
-
-// AI Analysis Routes
+// AI Routes
 app.post('/api/analyze', async (req, res) => {
   const { imageBase64 } = req.body;
-  
-  if (!imageBase64) {
-    return res.status(400).json({ error: 'No image data provided' });
-  }
+  if (!imageBase64) return res.status(400).json({ error: 'No image provided' });
 
-  console.log(`Received analysis request. Passing to Python. Size: ${imageBase64.length} bytes`);
-  
   try {
-    const result = await runPythonScript(path.join(process.cwd(), 'analyze.py'), imageBase64);
-    console.log('Python Analysis Response:', result);
+    let mimeType = "image/jpeg";
+    let data = imageBase64;
     
-    // Attempt to extract JSON if it's wrapped
-    const jsonMatch = result.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('AI did not return a valid JSON format');
+    if (imageBase64.includes(',')) {
+      const headerIndex = imageBase64.indexOf(',');
+      const header = imageBase64.substring(0, headerIndex);
+      data = imageBase64.substring(headerIndex + 1);
+      if (header.includes('png')) mimeType = "image/png";
+      else if (header.includes('webp')) mimeType = "image/webp";
     }
-    
-    const parsedData = JSON.parse(jsonMatch[0]);
-    res.json(parsedData);
+
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const result = await model.generateContent([
+      {
+        text: "You are a leather industry expert. Analyze this photo. Return a JSON object with fields: condition (New, Excellent, Good, Fair, or Poor), suggestedPrice (number in USD), confidence (0-1), and notes (string assessment)."
+      },
+      {
+        inlineData: {
+          mimeType,
+          data: data.trim()
+        }
+      }
+    ]);
+
+    const response = await result.response;
+    const text = response.text();
+    // Clean markdown if present
+    const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    res.json(JSON.parse(cleanJson));
   } catch (err: any) {
-    console.error('Python Analysis Error:', err);
+    console.error('AI Analysis Error:', err);
     res.status(500).json({ error: err.message || 'AI Analysis failed' });
   }
 });
@@ -128,14 +115,17 @@ app.post('/api/analyze', async (req, res) => {
 app.post('/api/impact', async (req, res) => {
   const { title } = req.body;
   try {
-    const result = await runPythonScript(path.join(process.cwd(), 'impact.py'), title || "leather item");
-    res.json({ impact: result || "Positive environmental impact through circularity." });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const result = await model.generateContent(`Sustainability expert: Explain environmental impact of reselling/recycling "${title || 'leather item'}". Metrics: water saved (L) and CO2 avoided (kg). 2 sentences max.`);
+    const response = await result.response;
+    res.json({ impact: response.text() });
   } catch (err: any) {
-    console.error('Python Impact Error:', err);
-    res.status(500).json({ error: err.message || 'Impact tracking failed' });
+    console.error('AI Impact Error:', err);
+    res.json({ impact: "Positive environmental impact through circularity." });
   }
 });
 
+// API Routes
 
 // User Profile
 app.get('/api/users/:uid', async (req, res) => {
@@ -181,16 +171,23 @@ app.get('/api/items', async (req, res) => {
   try {
     if (!db) throw new Error('Database not initialized');
     const { sellerId, status } = req.query;
+    console.log(`[API] GET /items - Filters: sellerId=${sellerId || 'none'}, status=${status || 'none'}`);
+    
     let query: any = db.collection('items');
 
-    if (sellerId) {
+    if (sellerId && typeof sellerId === 'string' && sellerId !== 'undefined') {
+      console.log(`[API] Adding sellerId filter: ${sellerId}`);
       query = query.where('sellerId', '==', sellerId);
     }
-    if (status) {
+    
+    if (status && typeof status === 'string' && status !== 'undefined') {
+      console.log(`[API] Adding status filter: ${status}`);
       query = query.where('status', '==', status);
     }
     
     const snapshot = await query.get();
+    console.log(`[API] Found ${snapshot.docs.length} items`);
+    
     const items = snapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...doc.data()
@@ -198,6 +195,7 @@ app.get('/api/items', async (req, res) => {
     
     res.json(items);
   } catch (err) {
+    console.error('Error fetching items:', err);
     res.status(500).json({ error: (err as Error).message });
   }
 });
@@ -271,6 +269,7 @@ app.post('/api/transactions', async (req, res) => {
 
 app.post('/api/items', async (req, res) => {
   const item = req.body;
+  console.log(`Creating item: ${item.title} (${item.id}) with status ${item.status}`);
   try {
     if (!db) throw new Error('Database not initialized');
     const itemData = {
@@ -285,8 +284,10 @@ app.post('/api/items', async (req, res) => {
     };
     
     await db.collection('items').doc(item.id).set(itemData);
+    console.log(`Successfully created item ${item.id}`);
     res.json({ success: true });
   } catch (err) {
+    console.error(`Error creating item ${item.id}:`, err);
     res.status(500).json({ error: (err as Error).message });
   }
 });

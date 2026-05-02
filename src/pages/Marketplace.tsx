@@ -31,27 +31,34 @@ export default function Marketplace() {
   const fetchItems = async () => {
     setLoading(true);
     try {
-      const data = await api.getItems();
-      // Filter for marketplace only
-      const marketItems = data.filter(i => i.status === 'marketplace');
+      // Filter for marketplace only on server side
+      const marketItems = await api.getItems(undefined, 'marketplace');
+      console.log(`Marketplace fetched ${marketItems.length} items:`, marketItems.map(i => ({ id: i.id, status: i.status, title: i.title })));
       
       // Sorting
       marketItems.sort((a, b) => {
-        if (sortBy === 'newest') {
-          return new Date(b.createdAt as any).getTime() - new Date(a.createdAt as any).getTime();
-        }
-        if (sortBy === 'price-low') {
-          return (a.listedPrice || 0) - (b.listedPrice || 0);
-        }
-        if (sortBy === 'price-high') {
-          return (b.listedPrice || 0) - (a.listedPrice || 0);
+        try {
+          if (sortBy === 'newest') {
+            const dateA = new Date(a.createdAt || 0).getTime();
+            const dateB = new Date(b.createdAt || 0).getTime();
+            return (dateB || 0) - (dateA || 0);
+          }
+          if (sortBy === 'price-low') {
+            return (a.listedPrice || 0) - (b.listedPrice || 0);
+          }
+          if (sortBy === 'price-high') {
+            return (b.listedPrice || 0) - (a.listedPrice || 0);
+          }
+        } catch (e) {
+          console.error("Sorting error:", e);
         }
         return 0;
       });
       
       setItems(marketItems);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert("Failed to load marketplace items. " + err.message);
     } finally {
       setLoading(false);
     }
@@ -105,8 +112,8 @@ export default function Marketplace() {
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiLink)}`;
 
   const filteredItems = items.filter(item => 
-    item.title.toLowerCase().includes(search.toLowerCase()) ||
-    item.category.toLowerCase().includes(search.toLowerCase())
+    (item.title || "").toLowerCase().includes(search.toLowerCase()) ||
+    (item.category || "").toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -160,6 +167,15 @@ export default function Marketplace() {
               <option value="price-low">Price: Low to High</option>
               <option value="price-high">Price: High to Low</option>
             </select>
+            
+            <button 
+              onClick={fetchItems}
+              disabled={loading}
+              className="flex items-center space-x-2 bg-white border border-gray-100 px-6 py-4 rounded-2xl font-bold text-gray-600 hover:border-[#5A5A40] transition-colors shadow-sm disabled:opacity-50"
+            >
+              <Loader2 className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
             
             <button className="flex items-center space-x-2 bg-white border border-gray-100 px-6 py-4 rounded-2xl font-bold text-gray-600 hover:border-[#5A5A40] transition-colors shadow-sm">
               <SlidersHorizontal className="w-5 h-5" />

@@ -1,5 +1,5 @@
 import { AIAnalysis } from "../types";
-
+ 
 export async function analyzeLeatherProduct(imageBase64: string): Promise<AIAnalysis> {
   const response = await fetch('/api/analyze', {
     method: 'POST',
@@ -7,21 +7,12 @@ export async function analyzeLeatherProduct(imageBase64: string): Promise<AIAnal
     body: JSON.stringify({ imageBase64 })
   });
 
-  const text = await response.text();
-  console.log('AI Analysis Raw Response:', text);
-  
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch (e) {
-    throw new Error(`Failed to parse AI response: ${text.substring(0, 100)}...`);
-  }
-  
   if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
     throw new Error(data.error || "Failed to analyze product with AI");
   }
 
-  return data as AIAnalysis;
+  return response.json();
 }
 
 export async function suggestSustainabilityImpact(itemTitle: string): Promise<string> {
@@ -31,12 +22,10 @@ export async function suggestSustainabilityImpact(itemTitle: string): Promise<st
     body: JSON.stringify({ title: itemTitle })
   });
 
-  const data = await response.json();
-
   if (!response.ok) {
-    console.warn("Impact suggestion failed:", data.error);
     return "Positive environmental impact through circularity.";
   }
 
+  const data = await response.json();
   return data.impact;
 }
